@@ -1,0 +1,58 @@
+name: Build Android APK
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          
+      - name: Setup Android SDK
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget unzip
+          wget https://dl.google.com/android/repository/commandlinetools-linux-latest.zip
+          unzip commandlinetools-linux-latest.zip -d $HOME/android-sdk
+          mkdir -p $HOME/android-sdk/cmdline-tools/latest
+          mv $HOME/android-sdk/cmdline-tools/* $HOME/android-sdk/cmdline-tools/latest/ 2>/dev/null || true
+          echo "y" | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
+          
+      - name: Create Cordova Project
+        run: |
+          npm install -g cordova
+          cordova create app com.frazypinya.com "MySuperApp"
+          cd app
+          cordova platform add android
+          # Copy website files
+          rm -rf www/*
+          cp -r ../website/* www/
+          
+      - name: Update Config
+        run: |
+          cd app
+          # Update version
+          sed -i 's/version="1.0.0"/version="1.0.0.0"/' config.xml
+          # Update theme color
+          sed -i 's/<preference name="StatusBarBackgroundColor" value=".*"/<preference name="StatusBarBackgroundColor" value="#00d2ff"/' config.xml
+          # Update orientation
+          sed -i '/<platform name="android">/a <preference name="Orientation" value="portrait" />' config.xml
+          
+      - name: Build APK
+        run: |
+          cd app
+          cordova build android --release
+          
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: app/platforms/android/app/build/outputs/apk/release/*.apk
